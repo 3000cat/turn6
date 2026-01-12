@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>班級抽籤大轉盤 - 魔法發條震撼版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #020617;
+            margin: 0; padding: 0;
+            width: 100vw; height: 100vh;
+            overflow: hidden;
+            display: flex;
+            color: white;
+        }
+
+        /* 閃電視覺層 */
+        #lightning-flash {
+            position: fixed;
+            inset: 0;
+            background: white;
+            opacity: 0;
+            pointer-events: none; 
+            z-index: 8000;
+        }
+
+        #lightning-svg-container {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9000;
+        }
+
+        .lightning-bolt {
+            fill: none;
+            stroke: #f0f9ff;
+            stroke-width: 8;
+            stroke-linecap: round;
+            filter: drop-shadow(0 0 25px #38bdf8) drop-shadow(0 0 10px #fff);
+            opacity: 0;
+        }
+
+        .flash-anim {
+            animation: lightningFlicker 0.45s ease-out forwards;
+        }
+
+        @keyframes lightningFlicker {
+            0% { opacity: 0; }
+            5% { opacity: 1; }
+            15% { opacity: 0.2; }
+            25% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        .bolt-anim {
+            animation: boltFlicker 0.5s ease-out forwards;
+        }
+
+        @keyframes boltFlicker {
+            0% { opacity: 1; stroke-dasharray: 1500; stroke-dashoffset: 1500; }
+            100% { opacity: 0; stroke-dashoffset: 0; }
+        }
+
+        /* 側邊設定面板 */
+        #sidebar {
+            position: fixed;
+            left: 0; top: 0; bottom: 0;
+            width: 300px;
+            background: rgba(15, 23, 42, 0.98);
+            backdrop-filter: blur(40px);
+            z-index: 10000;
+            transform: translateX(-100%);
+            transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            padding: 2rem 1.2rem;
+        }
+
+        #sidebar.open { transform: translateX(0); }
+
+        #main-stage {
+            flex: 1;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+            overflow: hidden;
+        }
+
+        /* 慶祝跳動效果 */
+        .shake-anim {
+            animation: screenShake 0.8s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes screenShake {
+            10%, 90% { transform: translate3d(0, -15px, 0); }
+            20%, 80% { transform: translate3d(0, 20px, 0); }
+            30%, 50%, 70% { transform: translate3d(0, -25px, 0); }
+            40%, 60% { transform: translate3d(0, 15px, 0); }
+        }
+
+        #wheel-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 98vw; height: 98vh;
+            filter: drop-shadow(0 25px 50px rgba(0, 0, 0, 0.8));
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* 指針設定：琥珀流金指針 */
+        #pointer-container {
+            position: absolute;
+            top: 50%;
+            right: 0px; 
+            transform: translateY(-50%);
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        #pointer-arrow {
+            width: 90px; height: 60px;
+            background: linear-gradient(to bottom, #fff7ed 0%, #fbbf24 40%, #d97706 60%, #92400e 100%);
+            clip-path: polygon(100% 10%, 0% 50%, 100% 90%);
+            filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.9));
+            border-left: 5px solid #ffffff;
+            transition: transform 0.08s ease-out;
+            position: relative;
+        }
+
+        #pointer-arrow::after {
+            content: '';
+            position: absolute;
+            top: 50%; left: 0;
+            width: 100%; height: 2px;
+            background: rgba(255, 255, 255, 0.6);
+            transform: translateY(-50%);
+        }
+
+        /* 開始按鈕：移至右下角 */
+        #spin-btn {
+            position: absolute;
+            right: 4vw; 
+            bottom: 4vh; 
+            padding: 0.8rem 3.8rem;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 50px;
+            font-weight: 900;
+            font-size: 1.25rem;
+            letter-spacing: 0.25em;
+            color: rgba(255, 255, 255, 0.9);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 200;
+            cursor: pointer;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        #spin-btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.18);
+            transform: scale(1.1);
+            color: white;
+            border-color: rgba(255, 255, 255, 0.5);
+            box-shadow: 0 0 40px rgba(99, 102, 241, 0.2);
+        }
+
+        #spin-btn:disabled {
+            opacity: 0.05;
+            cursor: default;
+        }
+
+        /* 中獎全螢窗 */
+        #winner-modal {
+            position: fixed;
+            inset: 0;
+            background: var(--win-bg, #6366f1);
+            background-image: radial-gradient(circle at center, rgba(255,255,255,0.4) 0%, transparent 85%);
+            z-index: 99999;
+            display: none; 
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            pointer-events: auto;
+        }
+
+        /* 中獎標籤 */
+        .winner-label {
+            position: absolute;
+            top: 10vh;
+            color: rgba(255,255,255,0.85);
+            font-weight: 900;
+            letter-spacing: 0.7em;
+            font-size: 2.25rem; 
+            text-transform: uppercase;
+            filter: drop-shadow(0 4px 15px rgba(0,0,0,0.6));
+        }
+
+        /* 巨大震撼號碼：PC端 70vh */
+        .winner-text {
+            font-size: 70vh; 
+            font-weight: 900;
+            color: #ffffff;
+            line-height: 0.85;
+            text-shadow: 
+                0 4px 0 #cccccc, 
+                0 8px 0 #b5b5b5, 
+                0 12px 0 #999999, 
+                0 16px 0 #777777,
+                0 40px 70px rgba(0,0,0,0.9), 
+                0 60px 130px rgba(0,0,0,0.8);
+            animation: winnerPop 0.4s cubic-bezier(0.17, 0.67, 0.83, 0.67) infinite alternate;
+            user-select: none;
+            margin-bottom: -3rem;
+        }
+
+        @keyframes winnerPop {
+            from { transform: scale(1); filter: brightness(1) saturate(1); }
+            to { transform: scale(1.05); filter: brightness(1.3) saturate(1.2); }
+        }
+
+        /* 響應式手機端調整 */
+        @media (max-width: 768px) {
+            .winner-text {
+                font-size: 45vh; 
+                margin-bottom: 0;
+            }
+            .winner-label {
+                top: 6vh;
+                font-size: 1.5rem;
+                letter-spacing: 0.3em;
+            }
+            #spin-btn, .btn-confirm {
+                padding: 0.7rem 2.5rem;
+                font-size: 1.2rem;
+                right: 6vw;
+                bottom: 5vh;
+            }
+        }
+
+        /* 確定鈕：右下角配置 */
+        .btn-confirm {
+            position: absolute;
+            right: 4vw;
+            bottom: 6vh;
+            padding: 0.9rem 3.5rem;
+            background-color: #000000;
+            color: #4ade80; 
+            border: 2px solid rgba(74, 222, 128, 0.7);
+            border-radius: 9999px;
+            font-size: 1.5rem;
+            font-weight: 900;
+            cursor: pointer;
+            box-shadow: 0 0 40px rgba(0,0,0,1), 0 0 25px rgba(74, 222, 128, 0.4);
+            transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            outline: none;
+            z-index: 100001;
+        }
+
+        .btn-confirm:hover {
+            transform: scale(1.1);
+            background-color: #0a0a0a;
+            border-color: #4ade80;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+
+        /* 提示訊息 */
+        #msg-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(244, 63, 94, 0.95);
+            padding: 1rem 3rem;
+            border-radius: 1.5rem;
+            font-weight: 900;
+            z-index: 20000;
+            display: none;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body onclick="initAudio()"> 
+
+    <div id="lightning-flash"></div>
+    <svg id="lightning-svg-container"></svg>
+    <div id="msg-box"></div>
+
+    <!-- 側邊設定面板 -->
+    <div id="sidebar" class="no-scrollbar">
+        <div class="flex items-center justify-between mb-8">
+            <h2 class="text-xl font-black text-indigo-400 tracking-wider">設定中心</h2>
+            <button onclick="toggleSidebar()" class="text-slate-500 hover:text-white transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="space-y-8 flex-1">
+            <div>
+                <button onclick="resetApp()" class="w-full py-4 bg-red-600 text-white rounded-2xl text-lg font-black hover:bg-red-500 transition tracking-widest uppercase shadow-xl">
+                    重置
+                </button>
+            </div>
+            <div>
+                <label class="block text-[10px] font-black text-slate-500 uppercase mb-4 tracking-widest">座號範圍</label>
+                <div class="flex items-center gap-3">
+                    <input type="number" id="start-idx" value="1" oninput="updateWheel()" class="w-full bg-slate-900 border border-slate-700 p-4 rounded-2xl outline-none text-center font-black text-xl text-white">
+                    <span class="text-slate-600 font-bold">~</span>
+                    <input type="number" id="end-idx" value="30" oninput="updateWheel()" class="w-full bg-slate-900 border border-slate-700 p-4 rounded-2xl outline-none text-center font-black text-xl text-white">
+                </div>
+            </div>
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest">排除名單 (紀錄)</label>
+                    <button onclick="clearExcludeList()" class="bg-red-500/20 text-red-400 px-3 py-1 rounded-lg text-[10px] font-bold hover:bg-red-500/40 transition">清空紀錄</button>
+                </div>
+                <textarea id="exclude-input" oninput="updateWheel()" class="w-full h-48 bg-slate-900 border border-slate-700 p-4 rounded-2xl outline-none text-base text-red-400 font-bold leading-relaxed no-scrollbar" placeholder="座號將自動記錄..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- 選單觸發按鈕 -->
+    <button onclick="toggleSidebar()" class="absolute left-6 top-6 z-[300] p-4 bg-white/5 border border-white/10 rounded-2xl text-slate-400 hover:text-white transition-all shadow-2xl backdrop-blur-md">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" />
+        </svg>
+    </button>
+
+    <div id="main-stage">
+        <div id="wheel-wrapper">
+            <div id="pointer-container">
+                <div id="pointer-arrow"></div>
+            </div>
+            <canvas id="wheel-canvas"></canvas>
+        </div>
+        <!-- 開始抽籤按鈕 -->
+        <button id="spin-btn" onclick="spin()">開始抽籤</button>
+    </div>
+
+    <!-- 中獎全螢幕視窗 -->
+    <div id="winner-modal">
+        <div class="winner-label">幸運號碼</div>
+        <div id="winner-display" class="winner-text">--</div>
+        <button id="confirm-winner-btn" onclick="closeWinnerModal()" class="btn-confirm">確定</button>
+    </div>
+
+    <script>
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+        let activeTimeouts = [];
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioCtx();
+                const buffer = audioCtx.createBuffer(1, 1, 22050);
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtx.destination);
+                source.start(0);
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        // --- 魔幻星辰慶典音效 (開獎音) ---
+        function playMagicalCosmicMusic() {
+            initAudio();
+            const now = audioCtx.currentTime;
+            for (let i = 0; i < 15; i++) {
+                const sOsc = audioCtx.createOscillator(); const sGain = audioCtx.createGain();
+                sOsc.type = 'sine'; sOsc.frequency.setValueAtTime(400 + (i * 150), now + i * 0.02);
+                sGain.gain.setValueAtTime(0.1, now + i * 0.02); sGain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.02 + 0.3);
+                sOsc.connect(sGain).connect(audioCtx.destination); sOsc.start(now + i * 0.02); sOsc.stop(now + i * 0.02 + 0.3);
+            }
+            const theme = [{f:523.25,d:0.2,s:0.3},{f:659.25,d:0.2,s:0.5},{f:783.99,d:0.2,s:0.7},{f:1046.50,d:1.5,s:0.9},{f:880.00,d:0.3,s:1.1},{f:1174.66,d:2.0,s:1.3}];
+            theme.forEach((note, i) => {
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+                osc.type = i % 2 === 0 ? 'triangle' : 'square';
+                osc.frequency.setValueAtTime(note.f, now + note.s);
+                gain.gain.setValueAtTime(0, now + note.s); gain.gain.linearRampToValueAtTime(0.2, now + note.s + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + note.s + note.d);
+                osc.connect(gain).connect(audioCtx.destination);
+                osc.start(now + note.s); osc.stop(now + note.s + note.d);
+            });
+        }
+
+        // --- 全新設計：魔法發條轉動音效 (Magical Clockwork Tick) ---
+        // 這種聲音具備齒輪感與清脆感，聽起來更有趣且不刺耳
+        const playClockworkTickSound = (index, progress) => {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            
+            // 使用和諧音程 (C, E, G, B) 確保旋律感
+            const clockScale = [523.25, 659.25, 783.99, 987.77];
+            const freq = clockScale[index % clockScale.length];
+            
+            // 1. 發條咬合主音 (帶有 Q 值的低通濾波)
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+            
+            osc.type = 'triangle'; 
+            osc.frequency.setValueAtTime(freq, now);
+            
+            filter.type = "lowpass";
+            filter.frequency.setValueAtTime(2500, now);
+            filter.Q.setValueAtTime(10, now); // 高共振營造發條木質感
+            
+            // 動態調整衰減，轉快時聲音極短
+            const decay = Math.max(0.03, 0.12 * (1 - progress));
+            
+            gain.gain.setValueAtTime(0.12, now); 
+            gain.gain.exponentialRampToValueAtTime(0.001, now + decay);
+            
+            osc.connect(filter).connect(gain).connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + decay);
+
+            // 2. 金屬微小碰撞高音 (Tiny Click)
+            const click = audioCtx.createOscillator();
+            const clickGain = audioCtx.createGain();
+            click.type = 'sine';
+            click.frequency.setValueAtTime(freq * 3, now);
+            clickGain.gain.setValueAtTime(0.04, now);
+            clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.02);
+            click.connect(clickGain).connect(audioCtx.destination);
+            click.start(now);
+            click.stop(now + 0.02);
+        };
+
+        const canvas = document.getElementById('wheel-canvas');
+        const ctx = canvas.getContext('2d');
+        const colors = ['#6366f1', '#f43f5e', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#f97316', '#14b8a6', '#4f46e5'];
+        
+        let students = [];
+        let rotation = 0; let isSpinning = false; let pendingWinner = null;
+        let lastTickIdx = -1; let resizeRequestId = null;
+
+        window.addEventListener('DOMContentLoaded', () => { loadStorage(); updateWheel(); initResize(); });
+
+        function showMsg(text) {
+            const box = document.getElementById('msg-box'); box.innerText = text; box.style.display = 'block';
+            setTimeout(() => box.style.display = 'none', 2000);
+        }
+
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+        function clearExcludeList() { document.getElementById('exclude-input').value = ""; updateWheel(); saveStorage(); }
+        function resetApp() {
+            localStorage.clear(); document.getElementById('start-idx').value = "1"; document.getElementById('end-idx').value = "30";
+            document.getElementById('exclude-input').value = ""; isSpinning = false; rotation = 0; pendingWinner = null;
+            const spinBtn = document.getElementById('spin-btn'); if (spinBtn) { spinBtn.disabled = false; spinBtn.style.opacity = "1"; }
+            updateWheel(); saveStorage(); showMsg("已重置所有數據");
+        }
+
+        function handleResize() {
+            const stage = document.getElementById('main-stage'); if (!stage) return;
+            const size = Math.floor(Math.min(stage.clientWidth * 0.988, stage.clientHeight * 0.988, 2000));
+            if (canvas.width !== size) {
+                canvas.width = size; canvas.height = size;
+                const pointerContainer = document.getElementById('pointer-container');
+                const gap = (stage.clientWidth - size) / 2;
+                pointerContainer.style.right = (gap - 65) + "px"; draw();
+            }
+        }
+
+        function initResize() {
+            const obs = new ResizeObserver(() => { if (resizeRequestId) cancelAnimationFrame(resizeRequestId); resizeRequestId = requestAnimationFrame(handleResize); });
+            obs.observe(document.getElementById('main-stage')); handleResize();
+        }
+
+        function updateWheel() {
+            if (isSpinning) return;
+            const start = parseInt(document.getElementById('start-idx').value) || 1;
+            const end = parseInt(document.getElementById('end-idx').value) || 1;
+            const exList = document.getElementById('exclude-input').value.split(/[\n, ]+/).filter(x => x.trim());
+            students = [];
+            for (let i = start; i <= end; i++) { if (!exList.includes(i.toString())) students.push(i.toString()); }
+            draw();
+        }
+
+        function draw() {
+            if (!canvas.width) return;
+            const cx = canvas.width / 2; const cy = canvas.height / 2; const radius = cx - 15;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (students.length === 0) {
+                ctx.textAlign = "center"; ctx.fillStyle = "#475569"; ctx.font = "900 30px Noto Sans TC";
+                ctx.fillText("請輸入座號或重置名單", cx, cy); return;
+            }
+            const slice = (Math.PI * 2) / students.length;
+            students.forEach((name, i) => {
+                const angle = rotation + i * slice;
+                ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, radius, angle, angle + slice);
+                ctx.fillStyle = colors[i % colors.length]; ctx.fill();
+                ctx.strokeStyle = '#020617'; ctx.lineWidth = students.length > 50 ? 1 : 4; ctx.stroke();
+                ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle + slice / 2);
+                ctx.textAlign = "right"; ctx.fillStyle = "white"; ctx.shadowBlur = 4; ctx.shadowColor = "rgba(0,0,0,0.5)";
+                const arcWidthAtEdge = radius * slice;
+                let fontSize = Math.min(arcWidthAtEdge * 0.72, radius * 0.15); 
+                if (students.length < 5) fontSize = radius * 0.18; fontSize = Math.max(fontSize, 18);
+                ctx.font = `900 ${fontSize}px Noto Sans TC`; ctx.fillText(name, radius - 20, fontSize * 0.35);
+                ctx.restore();
+            });
+            ctx.beginPath(); ctx.arc(cx, cy, radius * 0.05, 0, Math.PI * 2); ctx.fillStyle = "white"; ctx.fill();
+            ctx.strokeStyle = "#020617"; ctx.lineWidth = 4; ctx.stroke();
+        }
+
+        function spin() {
+            if (isSpinning) return;
+            if (students.length < 1) { updateWheel(); if (students.length < 1) return; }
+            isSpinning = true; initAudio(); 
+            const spinBtn = document.getElementById('spin-btn');
+            if (spinBtn) { spinBtn.disabled = true; spinBtn.style.opacity = "0.05"; }
+            const winIdx = Math.floor(Math.random() * students.length);
+            const slice = (Math.PI * 2) / students.length;
+            const duration = 6500; 
+            const currentNorm = ((rotation % (Math.PI * 2)) + (Math.PI * 2)) % (Math.PI * 2);
+            const destNorm = (Math.PI * 2) - (winIdx * slice + slice / 2);
+            let diff = destNorm - currentNorm; if (diff <= 0) diff += Math.PI * 2;
+            const startRot = rotation;
+            const targetRot = startRot + (25 * Math.PI * 2) + diff;
+            const startTime = performance.now();
+            const pointerArrow = document.getElementById('pointer-arrow');
+            function animate(now) {
+                const elapsed = now - startTime;
+                const p = Math.min(elapsed / duration, 1);
+                const ease = 1 - Math.pow(1 - p, 5); 
+                rotation = startRot + (targetRot - startRot) * ease;
+                const currentIdx = Math.floor(((rotation % (Math.PI * 2)) + (Math.PI * 2)) % (Math.PI * 2) / slice);
+                if (currentIdx !== lastTickIdx) {
+                    playClockworkTickSound(currentIdx, p); // 觸發全新魔法發條音效
+                    if(pointerArrow) {
+                        pointerArrow.style.transform = `translateX(-12px)`;
+                        setTimeout(() => { if(pointerArrow) pointerArrow.style.transform = `translateX(0)`; }, 40);
+                    }
+                    lastTickIdx = currentIdx;
+                }
+                draw();
+                if (p < 1) { requestAnimationFrame(animate); } else {
+                    rotation = targetRot; draw(); pendingWinner = students[winIdx];
+                    setTimeout(() => showWinner(pendingWinner, colors[winIdx % colors.length]), 400);
+                }
+            }
+            lastTickIdx = -1; requestAnimationFrame(animate);
+        }
+
+        function createLightningBolts() {
+            const container = document.getElementById('lightning-svg-container');
+            container.innerHTML = ''; const w = window.innerWidth; const h = window.innerHeight;
+            for (let i = 0; i < 6; i++) {
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                let x = Math.random() * w; let y = 0; let d = `M ${x} ${y}`;
+                const segments = 12;
+                for (let j = 1; j <= segments; j++) { x += (Math.random() - 0.5) * 180; y += h / segments; d += ` L ${x} ${y}`; }
+                path.setAttribute("d", d); path.setAttribute("class", "lightning-bolt bolt-anim");
+                path.style.animationDelay = `${Math.random() * 0.1}s`; container.appendChild(path);
+            }
+        }
+
+        function showWinner(name, color) {
+            playMagicalCosmicMusic();
+            const stage = document.getElementById('main-stage');
+            const flash = document.getElementById('lightning-flash');
+            const modal = document.getElementById('winner-modal');
+            createLightningBolts();
+            stage.classList.add('shake-anim');
+            flash.classList.add('flash-anim');
+            setTimeout(() => { stage.classList.remove('shake-anim'); flash.classList.remove('flash-anim'); }, 1000);
+            modal.style.setProperty('--win-bg', color);
+            document.getElementById('winner-display').innerText = name;
+            modal.style.display = 'flex'; 
+        }
+
+        function closeWinnerModal() {
+            const modal = document.getElementById('winner-modal');
+            const spinBtn = document.getElementById('spin-btn');
+            modal.style.display = 'none'; 
+            isSpinning = false; 
+            if (spinBtn) { spinBtn.disabled = false; spinBtn.style.opacity = "1"; }
+            activeTimeouts.forEach(t => clearTimeout(t)); activeTimeouts = [];
+            if (pendingWinner) {
+                const exArea = document.getElementById('exclude-input');
+                if (exArea) { const current = exArea.value.trim(); exArea.value = current + (current ? '\n' : '') + pendingWinner; }
+                pendingWinner = null; updateWheel(); saveStorage();
+            }
+        }
+
+        function saveStorage() {
+            localStorage.setItem('vMaster_start', document.getElementById('start-idx').value);
+            localStorage.setItem('vMaster_end', document.getElementById('end-idx').value);
+            localStorage.setItem('vMaster_ex', document.getElementById('exclude-input').value);
+        }
+
+        function loadStorage() {
+            const s = localStorage.getItem('vMaster_start');
+            const e = localStorage.getItem('vMaster_end');
+            const ex = localStorage.getItem('vMaster_ex');
+            if (s) document.getElementById('start-idx').value = s;
+            if (e) document.getElementById('end-idx').value = e;
+            if (ex) document.getElementById('exclude-input').value = ex;
+        }
+
+        window.addEventListener('keydown', e => {
+            if (e.code === 'Space' && !isSpinning && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                e.preventDefault(); spin();
+            }
+        });
+    </script>
+</body>
+</html>
